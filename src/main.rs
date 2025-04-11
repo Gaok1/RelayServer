@@ -143,8 +143,10 @@ impl Server {}
 fn main() {
     let server = Server::new();
     let server_clone = Arc::clone(&server);
-    thread::spawn(move || {
+    let h = thread::spawn(move || {
         Server::listen(server_clone);
     });
     println!("Testando");
+
+    h.join();
 }
