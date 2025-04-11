@@ -1,12 +1,13 @@
 use std::{
     borrow::Cow,
     io::{BufRead, BufReader, Write},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, ToSocketAddrs, UdpSocket},
     sync::{Arc, RwLock},
     thread,
 };
 
 use relay_tools::{peer_data::PeerId, RelayFlags::*, RelayMap::RelayMap, Requisitions::Req};
+use stunclient::StunClient;
 
 const LISTEN_PORT: u16 = 8080;
 const ADDR: &'static str = "0.0.0.0:8080";
@@ -146,7 +147,24 @@ impl Server {
 }
 
 
+fn get_stun_address(socket: &UdpSocket) -> String {
+    let stun_server = "stun.12voip.com:3478"
+        .to_socket_addrs()
+        .expect("Falha ao resolver endereço STUN")
+        .next()
+        .expect("Nenhum endereço encontrado");
+
+    let client = StunClient::new(stun_server);
+    match client.query_external_address(&socket) {
+        Ok(public_addr) => format!("{}", public_addr),
+        Err(e) => format!("Erro STUN: {}", e),
+    }
+}
+
 fn main() {
+    let socket = UdpSocket::bind("0.0.0.0:5000").expect("Erro ao criar socket UDP");
+    let stun_addr = get_stun_address(&socket);
+
     let server = Server::new();
     Server::listen(server);
 }
