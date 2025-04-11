@@ -148,7 +148,6 @@ impl Server {
 
 fn main() {
     let server = Server::new();
-
-    
+    Server::listen(server);
 }
 
