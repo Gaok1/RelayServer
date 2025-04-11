@@ -1,12 +1,13 @@
 use std::{
     borrow::Cow,
-    io::{BufRead, BufReader, Write},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener},
+    io::{BufRead, BufReader, Read, Write},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream},
     sync::{Arc, RwLock},
     thread,
+    time::Duration,
 };
 
-use relay_tools::{peer_data::PeerId, RelayFlags::*, RelayMap::RelayMap, Requisitions::Req};
+use relay_tools::{RelayFlags::*, RelayMap::RelayMap, Requisitions::Req, peer_data::PeerId};
 
 const LISTEN_PORT: u16 = 8080;
 const ADDR: &'static str = "0.0.0.0:8080";
@@ -71,7 +72,7 @@ impl Server {
                 return format!("erro|{}\n", e);
             }
         };
-    
+
         match parsed.flag {
             STORE => {
                 server
@@ -82,12 +83,12 @@ impl Server {
                 println!("[STORE] Peer {} registrado com IP {}", peer_id, peer_addr);
                 return format!("{}|{}|{}\n", STORED, peer_id, peer_addr);
             }
-    
+
             DISCOVER => {
                 let Some(target_id) = parsed.get_id() else {
                     return "DISCOVER malformado\n".to_string();
                 };
-    
+
                 let map_guard = server.relay_map.read().unwrap();
                 if let Some(peer_data) = map_guard.relay_map.get(&target_id) {
                     println!(
@@ -109,12 +110,12 @@ impl Server {
                     return format!("{}\n", NOT_PRESENT);
                 }
             }
-    
+
             WAITING_PUNCH => {
                 let Some(target_id) = parsed.get_id() else {
                     return "WAITING_PUNCH malformado\n".to_string();
                 };
-    
+
                 let mut map_guard = server.relay_map.write().unwrap();
                 if let Some(peer_data) = map_guard.relay_map.get_mut(&target_id) {
                     peer_data.waiting_punch = true;
@@ -127,28 +128,36 @@ impl Server {
                     return format!("{}\n", NOT_PRESENT);
                 }
             }
-    
+
             _ => {
                 eprintln!("Flag não reconhecida: {}", parsed.flag);
                 return "flag desconhecida\n".to_string();
             }
         }
     }
-    
 }
-
-
-
 
 // cordenar Hole Punch
-impl Server {
-
-}
-
+impl Server {}
 
 fn main() {
     let server = Server::new();
-    println!("Servidor iniciado em {}", ADDR);
-    Server::listen(server);
-}
+    let server_clone = Arc::clone(&server);
+    thread::spawn(move || {
+        Server::listen(server_clone);
+    });
+    println!("Testando");
 
+    let addres = SocketAddrV4::new(Ipv4Addr::new(66, 241, 124, 31), 8080);
+    let mut tcpSocket = TcpStream::connect(addres).unwrap();
+
+    tcpSocket
+        .write_all(format!("{STORE}|\n").as_bytes())
+        .unwrap();
+    let mut buffer = String::new();
+    loop {
+        tcpSocket.read_to_string(&mut buffer).unwrap();
+        println!("Resposta do servidor: {}", buffer);
+        thread::sleep(Duration::from_millis(500));
+    }
+}
