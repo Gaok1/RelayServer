@@ -147,17 +147,4 @@ fn main() {
         Server::listen(server_clone);
     });
     println!("Testando");
-
-    let addres = SocketAddrV4::new(Ipv4Addr::new(66, 241, 124, 31), 8080);
-    let mut tcpSocket = TcpStream::connect(addres).unwrap();
-
-    tcpSocket
-        .write_all(format!("{STORE}|\n").as_bytes())
-        .unwrap();
-    let mut buffer = String::new();
-    loop {
-        tcpSocket.read_to_string(&mut buffer).unwrap();
-        println!("Resposta do servidor: {}", buffer);
-        thread::sleep(Duration::from_millis(500));
-    }
 }
