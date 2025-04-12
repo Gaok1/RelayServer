@@ -42,14 +42,17 @@ impl Server {
        // println!("Escutando no ip público: {}", Self::get_stun_address());
         let listener = TcpListener::bind(LISTEN_ADDR).expect("Falha ao abrir socket");
         println!("Servidor escutando em {}", LISTEN_ADDR);
+        println!("Endereço do STUN: {}", get_stun_address());
+        println!("Aguardando conexões...");
 
         for stream in listener.incoming() {
             let Ok(stream) = stream else {
                 eprintln!("Falha ao aceitar conexão");
                 continue;
             };
+            println!("Conexão recebida de {}", stream.peer_addr().unwrap());
+            // Clona o Arc do servidor para passar para a thread
             let server = Arc::clone(&server);
-
             thread::spawn(move || {
                 if let Err(e) = Self::handle_client(stream, server) {
                     eprintln!("Erro ao tratar cliente: {e}");
@@ -68,7 +71,7 @@ impl Server {
         let SocketAddr::V4(addr) = peer_socket else {
             return Err(Error::new(ErrorKind::InvalidInput, "Endereço inválido"));
         };
-                let answer = Self::handle_request(buffer, addr, server.clone());
+        let answer = Self::handle_request(buffer, addr, server.clone());
         stream.write_all(answer.as_bytes())?;
         stream.flush()?;
         println!("Resposta enviada para {}: {}", addr, answer.trim_end());
@@ -94,35 +97,7 @@ impl Server {
                 Self::discover(server, parsed)
             }
             WAITING_PUNCH => {
-                // Operação WAITING_PUNCH: verifica se há target_id e se o peer requisitante já está registrado
-                if parsed.content.is_none(){
-                    return format!("{}|{}\n", INVALID_REQUEST_FORMAT, "Esperado WAITING_PUNCH|ID|TARGET_ID");
-                }
-                let content = parsed.content.unwrap();
-                let target_id = match content[0].parse::<PeerId>() {
-                    Ok(id) => id,
-                    Err(_) => return format!("{}|{}\n", INVALID_REQUEST_FORMAT, "Target id inválido"),
-                };
-
-                let mut map = server.relay_map.write().unwrap();
-                // Verifica se o remetente está registrado
-                match map.get_mut(&sender_id) {
-                    Some(data) => data.waiting_punch = true,
-                    None => return format!("{}|{}\n", INTERNAL_ERROR, "Peer não registrado"),
-                };
-                drop(map);
-                let now = std::time::SystemTime::now();
-                while now.elapsed().unwrap().as_secs() < TIME_OUT_WAITING_PUNCH {
-                    thread::sleep(Duration::from_secs(1));
-                    let map_reader = server.relay_map.read().unwrap();
-                    if let Some(peer_data) = map_reader.get(&target_id) {
-                        if peer_data.waiting_punch {
-                            return format!("{}|{}\n", PUNCH, target_id);
-                        }
-                    }
-                    
-                }
-                format!("{}\n", TIME_OUT_ERRO)
+                Self::waiting_punch(server, parsed, sender_id)
             },
             PUNCH_WAITING_TIMEOUT => {
                 let Ok(mut map) = server.relay_map.write() else {
@@ -186,6 +161,36 @@ impl Server {
         }
     }    
 
+    fn waiting_punch(server : Arc<Self>, parsed: Req, sender_id: PeerId) -> String {
+        // Operação WAITING_PUNCH: verifica se há target_id e se o peer requisitante já está registrado
+        if parsed.content.is_none(){
+            return format!("{}|{}\n", INVALID_REQUEST_FORMAT, "Esperado WAITING_PUNCH|ID|TARGET_ID");
+        }
+        let content = parsed.content.unwrap();
+        let target_id: PeerId = match content[0].parse::<PeerId>() {
+            Ok(id) => id,
+            Err(_) => return format!("{}|{}\n", INVALID_REQUEST_FORMAT, "Target id inválido"),
+        } ;
+
+        let mut map = server.relay_map.write().unwrap();
+        // Verifica se o remetente está registrado
+        match map.get_mut(&sender_id) {
+            Some(data) => data.waiting_punch = true,
+            None => return format!("{}|{}\n", INTERNAL_ERROR, "Peer não registrado"),
+        };
+        drop(map);
+        let now = std::time::SystemTime::now();
+        while now.elapsed().unwrap().as_secs() < TIME_OUT_WAITING_PUNCH {
+            thread::sleep(Duration::from_secs(1));
+            let map_reader = server.relay_map.read().unwrap();
+            if let Some(peer_data) = map_reader.get(&target_id) {
+                if peer_data.waiting_punch {
+                    return format!("{}|{}\n", PUNCH, target_id);
+                }
+            }
+        }
+        format!("{}\n", TIME_OUT_ERRO)
+    }
     
 }
 

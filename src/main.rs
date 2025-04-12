@@ -20,12 +20,7 @@ fn main() {
         Server::start_garbage_collector(gc_server);
     });
 
-    // Bloqueia a thread principal ouvindo conexões TCP
-    thread::spawn(|| {
-        Server::listen(server);
-    });
-    
+    Server::listen(server);
 
     //simular requisição store e discover
 }
-
