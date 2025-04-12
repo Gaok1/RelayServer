@@ -1,25 +1,26 @@
 
+//! Constantes de flags usadas pelo protocolo do relay.
 
 pub type RelayFlag = u16;
 
-// Requisitons[client]
-pub const STORE : RelayFlag = 0x0; //to save peer data [id -> addr]
-pub const DISCOVER : RelayFlag = 0x11; // [(peerID) --> (peerIpAddr)] to discover peers
+// --- Requisições do cliente ---> Servidor
+pub const STORE: RelayFlag = 0x000;      // Registra (ID -> Endereço)
+pub const DISCOVER: RelayFlag = 0x011;   // Descobre endereço de outro peer
+pub const WAITING_PUNCH: RelayFlag = 0x010; // Informa que está aguardando o hole‑punch
 
-//answers [client]
-pub const WAITING_PUNCH : RelayFlag = 0x10;
+// --- Respostas do servidor ---> Cliente
+// STORE
+pub const STORED: RelayFlag = 0x001;
+pub const NOT_STORED: RelayFlag = 0x002;
+// DISCOVER
+pub const PRESENT: RelayFlag = 0x111;
+pub const NOT_PRESENT: RelayFlag = 0x110;
+// HOLE‑PUNCH
+pub const PUNCH_WAITING_TIMEOUT: RelayFlag = 0x101; // Timeout para o hole-punch
+pub const PUNCH: RelayFlag = 0x102;
 
-//answers [server]
-// STORE TYPE ANSWERS
-pub const STORED : RelayFlag = 0x01; //to save peer data [id -> addr]
-pub const NOT_STORED : RelayFlag = 0x02; //to save peer data [id -> addr]
-
-// DISCOVER TYPE ANSWERS
-pub const NOT_PRESENT : RelayFlag = 0x110;
-pub const PRESENT : RelayFlag = 0x111;
-
-// PUNCH TYPE ANSWERS
-pub const PUNCH : RelayFlag = 0x102;
+pub const INTERNAL_ERROR: RelayFlag = 0x999; // Erro interno do servidor
+pub const INVALID_REQUEST_FORMAT: RelayFlag = 0x998; // Formato de requisição inválido
 
 
 
@@ -29,8 +30,8 @@ pub const PUNCH : RelayFlag = 0x102;
 // | separated information
 //#  example
 // STORE|ID|
-// DISCOVER|ID
-// WAITING_PUNCH
+// DISCOVER|USERID|DiscoverUserID
+// WAITING_PUNCH|USERID|PEERID
 // PUNCH 
 // STORED
 // NOT_STORED

@@ -1,53 +1,59 @@
 use std::str::FromStr;
-use super::{peer_data::{PeerId}, RelayFlags::RelayFlag};
+
+use super::RelayFlags::RelayFlag;
+use super::peer_data::PeerId;
 
 #[derive(Debug)]
 pub struct Req {
     pub flag: RelayFlag,
-    pub content: Vec<String>,
+    pub content: Option<Vec<String>>,
+    peer_id: PeerId,
 }
-
 impl FromStr for Req {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        let parts: Vec<&str> = s.split('|').collect();
-        if parts.len() < 1 {
-            return Err("requisição malformada".to_string());
+        // Remove espaços em branco no início e fim
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            return Err("Entrada vazia".to_string());
         }
 
-        let flag = parts[0].parse::<RelayFlag>()
-            .map_err(|_| "flag inválida".to_string())?;
+        // Divide a string pelo delimitador '|'
+        let parts: Vec<&str> = trimmed.split('|').collect();
+        // Esperamos pelo menos três partes: flag, peer_id e conteúdo
+        if parts.len() < 3 {
+            return Err("Formato inválido: esperado 'flag|peer_id|conteúdo'".to_string());
+        }
 
-        let content = parts[1..].iter().map(|s| s.to_string()).collect();
+        // Converte a flag (primeira parte)
+        let flag = parts[0]
+            .parse::<RelayFlag>()
+            .map_err(|_| "Flag inválida".to_string())?;
 
-        Ok(Req { flag, content })
+        // Converte o peer_id (segunda parte)
+        let peer_id = parts[1]
+            .parse::<PeerId>()
+            .map_err(|_| "PeerId inválido".to_string())?;
+
+        // O conteúdo é formado pelas partes restantes
+        let content: Vec<String> =  parts[2..].iter().map(|s| s.to_string()).collect();
+        
+        let content = match content.is_empty() {
+            true => None,
+            false => Some(content),
+        };
+
+        Ok(Req {
+            flag,
+            peer_id,
+            content,
+        })
     }
 }
 
 impl Req {
-    pub fn to_string(&self) -> String {
-        let mut result = self.flag.to_string();
-        for c in &self.content {
-            result.push('|');
-            result.push_str(c);
-        }
-        result.push('\n');
-        result
-    }
-
-    pub fn get_id(&self) -> Option<PeerId> {
-        self.content.get(0)?.parse::<PeerId>().ok()
-    }
-
-    pub fn get_target_addr(&self) -> Option<(String, u16)> {
-        if self.content.len() >= 3 {
-            let ip = self.content[1].clone();
-            let port = self.content[2].parse::<u16>().ok()?;
-            Some((ip, port))
-        } else {
-            None
-        }
+    pub fn get_id(&self) -> PeerId {
+        self.peer_id
     }
 }
