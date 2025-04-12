@@ -14,6 +14,8 @@ use super::peer_data::PeerId;
 
 const LISTEN_ADDR: &str = "0.0.0.0:8080";
 
+const TIME_OUT_WAITING_PUNCH: u64 = 30; // Timeout para espera do outro peer para punch em segundos
+
 pub struct Server {
     relay_map: RwLock<RelayMap>,
 }
@@ -33,23 +35,7 @@ impl Server {
         }
     }
 
-    /// Descobre o endereço público via STUN
-    fn get_stun_address() -> String {
-        let Ok(socket) = UdpSocket::bind("0.0.0.0:8080") else {
-            return "Erro ao criar socket UDP".into();
-        };
-        let stun_server = "stun.12voip.com:3478"
-            .to_socket_addrs()
-            .expect("Falha ao resolver endereço STUN")
-            .next()
-            .expect("Nenhum endereço encontrado");
-
-        let client = StunClient::new(stun_server);
-        match client.query_external_address(&socket) {
-            Ok(public_addr) => format!("{}", public_addr),
-            Err(e) => format!("Erro STUN: {}", e),
-        }
-    }
+    
 
     /// Loop principal do servidor – aceita conexões e despacha para threads.
     pub fn listen(server: Arc<Self>) {
@@ -102,47 +88,10 @@ impl Server {
 
         match parsed.flag {
             STORE => {
-                // Operação STORE: registra o remetente com seu endereço
-                match server.relay_map.write().unwrap().bind_peer(sender_id, addr) {
-                    Ok(_) => {
-                        println!("[STORE] Peer {} registrado em {}", sender_id, addr);
-                        format!("{}|{}|{}\n", STORED, addr, sender_id)
-                    }
-                    Err(e) => {
-                        eprintln!("[STORE] Erro: {}", e);
-                        format!("{}|{}\n", NOT_STORED, e)
-                    }
-                }
+                Self::store(server, sender_id, addr)
             }
             DISCOVER => {
-                // Operação DISCOVER: espera que o target_id seja informado como segundo argumento
-                if parsed.content.is_none() {
-                    return "erro|DISCOVER requer target id\n".to_string();
-                }
-                let content = parsed.content.unwrap();
-                
-                let target_id = match content[0].parse::<PeerId>() {
-                    Ok(id) => id,
-                    Err(_) => return "erro|Target id inválido\n".to_string(),
-                };
-
-                let map_guard = server.relay_map.read().unwrap();
-                if let Some(peer_data) = map_guard.get(&target_id) {
-                    println!(
-                        "[DISCOVER] {} => PRESENT {}",
-                        target_id, peer_data.peer_addr
-                    );
-                    format!(
-                        "{}|{}|{}|{}\n",
-                        PRESENT,
-                        target_id,
-                        peer_data.peer_addr.ip(),
-                        peer_data.peer_addr.port()
-                    )
-                } else {
-                    println!("[DISCOVER] {} => NOT PRESENT", target_id);
-                    format!("{}\n", NOT_PRESENT)
-                }
+                Self::discover(server, parsed)
             }
             WAITING_PUNCH => {
                 // Operação WAITING_PUNCH: verifica se há target_id e se o peer requisitante já está registrado
@@ -157,30 +106,23 @@ impl Server {
 
                 let mut map = server.relay_map.write().unwrap();
                 // Verifica se o remetente está registrado
-                let my_data = match map.get_mut(&sender_id) {
-                    Some(data) => data,
+                match map.get_mut(&sender_id) {
+                    Some(data) => data.waiting_punch = true,
                     None => return format!("{}|{}\n", INTERNAL_ERROR, "Peer não registrado"),
                 };
-                my_data.waiting_punch = true;
-
-                // Se o target também estiver preparado para punch, retorna a mensagem de PUNCH
-                if let Some(target) = map.get(&target_id) {
-                    if target.waiting_punch {
-                        println!(
-                            "[PUNCH] {} <-> {} => liberado {}",
-                            sender_id, target_id, target.peer_addr
-                        );
-                        return format!(
-                            "{}|{}|{}|{}\n",
-                            PUNCH,
-                            target_id,
-                            target.peer_addr.ip(),
-                            target.peer_addr.port()
-                        );
+                drop(map);
+                let now = std::time::SystemTime::now();
+                while now.elapsed().unwrap().as_secs() < TIME_OUT_WAITING_PUNCH {
+                    thread::sleep(Duration::from_secs(1));
+                    let map_reader = server.relay_map.read().unwrap();
+                    if let Some(peer_data) = map_reader.get(&target_id) {
+                        if peer_data.waiting_punch {
+                            return format!("{}|{}\n", PUNCH, target_id);
+                        }
                     }
+                    
                 }
-                println!("[WAITING] {} aguardando {}", sender_id, target_id);
-                format!("{}\n", WAITING_PUNCH)
+                format!("{}\n", TIME_OUT_ERRO)
             },
             PUNCH_WAITING_TIMEOUT => {
                 let Ok(mut map) = server.relay_map.write() else {
@@ -199,9 +141,72 @@ impl Server {
     }
 
 
-    
+    fn store(server : Arc<Self>, sender_id: PeerId, addr: SocketAddrV4) -> String {
+        // Operação STORE: registra o remetente com seu endereço
+        match server.relay_map.write().unwrap().bind_peer(sender_id, addr) {
+            Ok(_) => {
+                println!("[STORE] Peer {} registrado em {}", sender_id, addr);
+                format!("{}|{}|{}\n", STORED, addr, sender_id)
+            }
+            Err(e) => {
+                eprintln!("[STORE] Erro: {}", e);
+                format!("{}|{}\n", NOT_STORED, e)
+            }
+        }
+    }
+
+    fn discover(server : Arc<Self>, parsed: Req) -> String {
+        // Operação DISCOVER: espera que o target_id seja informado como segundo argumento
+        if parsed.content.is_none() {
+            return "erro|DISCOVER requer target id\n".to_string();
+        }
+        let content = parsed.content.unwrap();
+        
+        let target_id = match content[0].parse::<PeerId>() {
+            Ok(id) => id,
+            Err(_) => return "erro|Target id inválido\n".to_string(),
+        };
+
+        let map_guard = server.relay_map.read().unwrap();
+        if let Some(peer_data) = map_guard.get(&target_id) {
+            println!(
+                "[DISCOVER] {} => PRESENT {}",
+                target_id, peer_data.peer_addr
+            );
+            format!(
+                "{}|{}|{}|{}\n",
+                PRESENT,
+                target_id,
+                peer_data.peer_addr.ip(),
+                peer_data.peer_addr.port()
+            )
+        } else {
+            println!("[DISCOVER] {} => NOT PRESENT", target_id);
+            format!("{}\n", NOT_PRESENT)
+        }
+    }    
 
     
 }
 
 
+
+
+
+/// Descobre o endereço público via STUN
+fn get_stun_address() -> String {
+    let Ok(socket) = UdpSocket::bind("0.0.0.0:8080") else {
+        return "Erro ao criar socket UDP".into();
+    };
+    let stun_server = "stun.12voip.com:3478"
+        .to_socket_addrs()
+        .expect("Falha ao resolver endereço STUN")
+        .next()
+        .expect("Nenhum endereço encontrado");
+
+    let client = StunClient::new(stun_server);
+    match client.query_external_address(&socket) {
+        Ok(public_addr) => format!("{}", public_addr),
+        Err(e) => format!("Erro STUN: {}", e),
+    }
+}

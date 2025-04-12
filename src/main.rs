@@ -28,3 +28,4 @@ fn main() {
 
     //simular requisição store e discover
 }
+

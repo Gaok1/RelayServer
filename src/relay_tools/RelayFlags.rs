@@ -21,8 +21,7 @@ pub const PUNCH: RelayFlag = 0x102;
 
 pub const INTERNAL_ERROR: RelayFlag = 0x999; // Erro interno do servidor
 pub const INVALID_REQUEST_FORMAT: RelayFlag = 0x998; // Formato de requisição inválido
-
-
+pub const TIME_OUT_ERRO: RelayFlag = 0x997; // Timeout para erro
 
 // Requisitons type
 // Header  -> flag
