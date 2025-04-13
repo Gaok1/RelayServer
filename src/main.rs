@@ -21,7 +21,8 @@ fn main() {
     thread::spawn(move || {
         Server::listen(server);
     });
-    
+    thread::sleep(Duration::from_secs(5));
+    println!("Conectando ao servidor...");
     let mut tcp = TcpStream::connect("127.0.0.1:8080").unwrap();
     let message = format!("{STORE}|{}|\n", 2);
 
