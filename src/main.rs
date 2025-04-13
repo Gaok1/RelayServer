@@ -11,7 +11,6 @@ use relay_tools::server::Server;
 mod relay_tools;
 
 fn main() {
-    // Inicia o servidor de relay
     let server = Server::new();
 
     // Thread de coleta de lixo para remover peers expirados
@@ -19,8 +18,24 @@ fn main() {
     thread::spawn(move || {
         Server::start_garbage_collector(gc_server);
     });
+    thread::spawn(move || {
+        Server::listen(server);
+    });
+    
+    let mut tcp = TcpStream::connect("66.241.124.31:8080").unwrap();
+    let message = format!("{STORE}|{}|\n", 2);
 
-    Server::listen(server);
-
+    tcp.write_all(message.as_bytes()).unwrap();
+    tcp.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut reader = BufReader::new(tcp);
+    let mut buffer = String::new();
+    reader.read_line(&mut buffer).unwrap();
+    loop {
+        if buffer != "" {
+            println!("Recebido: {}", buffer);
+            buffer.clear();
+        }
+        reader.read_line(&mut buffer).unwrap();
+    }
     //simular requisição store e discover
 }
