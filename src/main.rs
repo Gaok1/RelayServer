@@ -22,7 +22,7 @@ fn main() {
         Server::listen(server);
     });
     
-    let mut tcp = TcpStream::connect("66.241.124.31:8080").unwrap();
+    let mut tcp = TcpStream::connect("127.0.0.1:8080").unwrap();
     let message = format!("{STORE}|{}|\n", 2);
 
     tcp.write_all(message.as_bytes()).unwrap();
@@ -30,6 +30,7 @@ fn main() {
     let mut reader = BufReader::new(tcp);
     let mut buffer = String::new();
     reader.read_line(&mut buffer).unwrap();
+    
     loop {
         if buffer != "" {
             println!("Recebido: {}", buffer);
