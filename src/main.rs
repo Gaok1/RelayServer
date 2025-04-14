@@ -1,43 +1,30 @@
-use std::fmt::format;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{SocketAddr, SocketAddrV4, TcpListener, TcpStream};
-use std::sync::{Arc, RwLock};
-use std::thread;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpStream;
 use std::time::Duration;
 
-use relay_tools::RelayFlags::{DISCOVER, STORE, WAITING_PUNCH};
 use relay_tools::server::Server;
 
 mod relay_tools;
 
-fn main() {
-    let server = Server::new();
+/// Função auxiliar que envia uma requisição HTTP via TcpStream e retorna a resposta como String.
+/// Essa função simula uma máquina externa, sem compartilhar o estado interno do servidor.
+fn send_http_request(request: &str) -> String {
+    let mut stream = TcpStream::connect("127.0.0.1:8080").expect("Falha ao conectar ao servidor");
+    stream
+        .write_all(request.as_bytes())
+        .expect("Falha ao enviar a requisição");
+    stream
+        .shutdown(std::net::Shutdown::Write)
+        .expect("Falha ao fechar o stream de escrita");
+    let mut reader = BufReader::new(stream);
+    let mut response = String::new();
+    reader
+        .read_to_string(&mut response)
+        .expect("Falha ao ler a resposta");
+    response
+}
 
-    // Thread de coleta de lixo para remover peers expirados
-    let gc_server = Arc::clone(&server);
-    thread::spawn(move || {
-        Server::start_garbage_collector(gc_server);
-    });
-    thread::spawn(move || {
-        Server::listen(server);
-    });
-    thread::sleep(Duration::from_secs(5));
-    println!("Conectando ao servidor...");
-    let mut tcp = TcpStream::connect("127.0.0.1:8080").unwrap();
-    let message = format!("{STORE}|{}|\n", 2);
-
-    tcp.write_all(message.as_bytes()).unwrap();
-    tcp.shutdown(std::net::Shutdown::Write).unwrap();
-    let mut reader = BufReader::new(tcp);
-    let mut buffer = String::new();
-    reader.read_line(&mut buffer).unwrap();
-    
-    loop {
-        if buffer != "" {
-            println!("Recebido: {}", buffer);
-            buffer.clear();
-        }
-        reader.read_line(&mut buffer).unwrap();
-    }
-    //simular requisição store e discover
+#[tokio::main]
+async fn main() {
+    Server::new().start_http_server().await;
 }

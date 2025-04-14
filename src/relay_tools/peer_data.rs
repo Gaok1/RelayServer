@@ -1,6 +1,6 @@
 // ============================
-use std::net::SocketAddrV4;
 use crate::relay_tools::RelayMap::now_ms;
+use std::net::SocketAddrV4;
 
 pub type PeerId = u64;
 
@@ -10,17 +10,17 @@ pub struct PeerData {
     pub peer_addr: SocketAddrV4,
     pub discovery_time: u128,
     pub waiting_punch: bool,
-    stream: Option<std::net::TcpStream>,
+    pub waiting_for: Option<PeerId>,
 }
 
-impl  PeerData {
+impl PeerData {
     fn clone_no_stream(&self) -> Self {
         Self {
             peer_id: self.peer_id,
             peer_addr: self.peer_addr,
             discovery_time: self.discovery_time,
             waiting_punch: self.waiting_punch,
-            stream: None, // Não clona o stream
+            waiting_for: self.waiting_for,
         }
     }
 
@@ -30,7 +30,7 @@ impl  PeerData {
             peer_addr,
             discovery_time: now_ms(),
             waiting_punch: false,
-            stream: None,
+            waiting_for: None,
         }
     }
 }
