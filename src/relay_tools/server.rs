@@ -129,11 +129,13 @@ async fn discover(
 ) -> Json<RelayResponse> {
     let map_guard = server.relay_map.read().unwrap();
     if let Some(peer_data) = map_guard.get(&req.target_id) {
+        println!("Peer {}  found Peer {}", req.target_id, peer_data.peer_addr);
         Json(RelayResponse {
             status: "present".into(),
             message: format!("{}", peer_data.peer_addr),
         })
     } else {
+        println!("Peer {} not found", req.target_id);
         Json(RelayResponse {
             status: "not_present".into(),
             message: "".into(),
@@ -153,8 +155,13 @@ async fn waiting_punch(
                 data.waiting_punch = true;
                 // Novo campo para indicar com qual peer está aguardando
                 data.waiting_for = Some(req.target_id.clone());
+                println!(
+                    "Peer {} está aguardando hole punch com {}",
+                    req.sender_id, req.target_id
+                );
             }
             None => {
+                println!("Peer {} não registrado", req.sender_id);
                 return Json(RelayResponse {
                     status: "error".into(),
                     message: "Peer não registrado".into(),
@@ -166,15 +173,18 @@ async fn waiting_punch(
     // Checa se o peer alvo existe e se ele está aguardando um hole punch com o peer remetente.
     let map_reader = server.relay_map.read().unwrap();
     if let Some(target_peer) = map_reader.get(&req.target_id.clone()) {
-        if target_peer.waiting_punch && target_peer.waiting_for == Some(req.sender_id) {
+        if target_peer.waiting_punch && target_peer.waiting_for == Some(req.sender_id.clone()) {
+            println!(
+                "Peer {} está aguardando hole punch com {}",
+                req.target_id, req.sender_id
+            );
             return Json(RelayResponse {
                 status: "punch".into(),
                 message: req.target_id.clone(),
             });
         }
     }
-
-    // Se a condição não for satisfeita, retorna "not_punch"
+    println!("Peer {} não está aguardando hole punch com {}", req.target_id, req.sender_id);
     Json(RelayResponse {
         status: "not_punch".into(),
         message: "".into(),
