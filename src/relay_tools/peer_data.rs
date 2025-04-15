@@ -2,7 +2,7 @@
 use crate::relay_tools::RelayMap::now_ms;
 use std::net::SocketAddrV4;
 
-pub type PublicKey = u128;
+pub type PublicKey = String;
 
 #[derive(Debug)]
 pub struct PeerData {
@@ -16,11 +16,11 @@ pub struct PeerData {
 impl PeerData {
     fn clone_no_stream(&self) -> Self {
         Self {
-            public_key: self.public_key,
+            public_key: self.public_key.clone(),
             peer_addr: self.peer_addr,
             discovery_time: self.discovery_time,
             waiting_punch: self.waiting_punch,
-            waiting_for: self.waiting_for,
+            waiting_for: self.waiting_for.clone(),
         }
     }
     

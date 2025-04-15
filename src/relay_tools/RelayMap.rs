@@ -26,7 +26,7 @@ impl RelayMap {
             return Err("Peer já registrado".into());
         }
 
-        let peer_data = PeerData::new(public_key, peer_addr);
+        let peer_data = PeerData::new(public_key.clone(), peer_addr);
         self.inner.insert(public_key, peer_data);
         Ok(())
     }

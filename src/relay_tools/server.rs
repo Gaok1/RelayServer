@@ -152,7 +152,7 @@ async fn waiting_punch(
             Some(data) => {
                 data.waiting_punch = true;
                 // Novo campo para indicar com qual peer está aguardando
-                data.waiting_for = Some(req.target_id);
+                data.waiting_for = Some(req.target_id.clone());
             }
             None => {
                 return Json(RelayResponse {
@@ -165,11 +165,11 @@ async fn waiting_punch(
 
     // Checa se o peer alvo existe e se ele está aguardando um hole punch com o peer remetente.
     let map_reader = server.relay_map.read().unwrap();
-    if let Some(target_peer) = map_reader.get(&req.target_id) {
+    if let Some(target_peer) = map_reader.get(&req.target_id.clone()) {
         if target_peer.waiting_punch && target_peer.waiting_for == Some(req.sender_id) {
             return Json(RelayResponse {
                 status: "punch".into(),
-                message: req.target_id.to_string(),
+                message: req.target_id.clone(),
             });
         }
     }
@@ -212,11 +212,11 @@ async fn passive_wait(
     if let Some(peer) = map
         .inner
         .values()
-        .find(|p| p.waiting_punch && p.waiting_for == Some(req.sender_id))
+        .find(|p| p.waiting_punch && p.waiting_for == Some(req.sender_id.clone()))
     {
         return Json(PassiveWaitResponse {
             status: "peer_found".into(),
-            peer_public_key: Some(peer.public_key),
+            peer_public_key: Some(peer.public_key.clone()),
         });
     }
 
