@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="pt">
-
 <head>
   <meta charset="UTF-8">
   <title>Teste do Servidor Relay com STUN</title>
@@ -9,12 +8,10 @@
       font-family: Arial, sans-serif;
       margin: 20px;
     }
-
     button {
       padding: 10px 20px;
       margin-bottom: 20px;
     }
-
     #output p {
       background: #f1f1f1;
       padding: 10px;
@@ -22,6 +19,8 @@
     }
   </style>
   <script>
+    const BASE_URL = "https://relayserver-7mrprq-production.up.railway.app";
+
     async function getIPv4AddressViaStun() {
       return new Promise((resolve, reject) => {
         const rtc = new RTCPeerConnection({
@@ -54,9 +53,9 @@
       });
     }
 
-    async function sendPost(url, bodyObj) {
+    async function sendPost(endpoint, bodyObj) {
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${BASE_URL}${endpoint}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -77,9 +76,10 @@
         const stunAddr = await getIPv4AddressViaStun();
         output.innerHTML += `<p>Endereço público STUN para peer ${peerId}: ${stunAddr}</p>`;
 
-        const url = "http://127.0.0.1:8080/store";
-        const body = { sender_id: peerId, p2p_addr: stunAddr };
-        const result = await sendPost(url, body);
+        const result = await sendPost("/store", {
+          sender_id: peerId,
+          p2p_addr: stunAddr
+        });
         output.innerHTML += `<p>Resposta do /store (peer ${peerId}): ${JSON.stringify(result)}</p>`;
       } catch (err) {
         output.innerHTML += `<p>Erro ao obter STUN para peer ${peerId}: ${err}</p>`;
@@ -87,9 +87,10 @@
     }
 
     async function testWaitingPunch(senderId, targetId) {
-      const url = "http://127.0.0.1:8080/waiting_punch";
-      const body = { sender_id: senderId, target_id: targetId };
-      const result = await sendPost(url, body);
+      const result = await sendPost("/waiting_punch", {
+        sender_id: senderId,
+        target_id: targetId
+      });
       const output = document.getElementById("output");
       output.innerHTML += `<p>Resposta do /waiting_punch (peer ${senderId} aguardando peer ${targetId}): ${JSON.stringify(result)}</p>`;
     }
@@ -106,11 +107,9 @@
     }
   </script>
 </head>
-
 <body>
   <h1>Teste do Servidor Relay (com STUN)</h1>
   <button onclick="runTests()">Executar Testes com STUN</button>
   <div id="output"></div>
 </body>
-
 </html>

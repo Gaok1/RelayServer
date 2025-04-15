@@ -1,14 +1,15 @@
-use std::{net::SocketAddrV4, sync::{Arc, RwLock}, time::Duration};
-use axum::{
-    Json, Router, extract::State, routing::post,
-    http::Method,
-};
+use axum::{Json, Router, extract::State, http::Method, routing::post};
 use serde::{Deserialize, Serialize};
+use std::{
+    net::SocketAddrV4,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tokio::{net::TcpListener, task};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::RelayMap::RelayMap;
-use super::peer_data::PeerId;
+use super::peer_data::PublicKey;
 
 #[derive(Clone)]
 pub struct Server {
@@ -17,20 +18,19 @@ pub struct Server {
 
 #[derive(Deserialize)]
 struct StoreRequest {
-    sender_id: PeerId,
-    p2p_addr: String, // <-- nome mais claro agora
+    sender_id: PublicKey,
+    p2p_addr: String, //
 }
-
 
 #[derive(Deserialize)]
 struct DiscoverRequest {
-    target_id: PeerId,
+    target_id: PublicKey,
 }
 
 #[derive(Deserialize)]
 struct WaitingPunchRequest {
-    sender_id: PeerId,
-    target_id: PeerId,
+    sender_id: PublicKey,
+    target_id: PublicKey,
 }
 
 #[derive(Serialize)]
@@ -38,6 +38,19 @@ struct RelayResponse {
     status: String,
     message: String,
 }
+
+#[derive(Deserialize)]
+struct PassiveWaitRequest {
+    sender_id: PublicKey,
+}
+
+#[derive(Serialize)]
+struct PassiveWaitResponse {
+    status: String,
+    peer_public_key: Option<PublicKey>,
+}
+
+const GARBAGE_COLECTION_INTERVAL: u64 = 600_000; // 10 minutos //em ms
 
 impl Server {
     pub fn new() -> Self {
@@ -56,18 +69,19 @@ impl Server {
             .allow_methods([Method::GET, Method::POST])
             .allow_headers([CONTENT_TYPE]);
 
-
         let app = Router::new()
             .route("/store", post(store))
             .route("/discover", post(discover))
             .route("/waiting_punch", post(waiting_punch))
+            .route("/keep_alive", post(keep_alive))
+            .route("/passive_wait", post(passive_wait))
             .layer(cors)
             .with_state(server.clone());
 
         let gc_server = server.clone();
         task::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(60)).await;
+                tokio::time::sleep(Duration::from_millis(GARBAGE_COLECTION_INTERVAL)).await;
                 gc_server.relay_map.write().unwrap().garbage_collect();
             }
         });
@@ -109,7 +123,6 @@ async fn store(
     }
 }
 
-
 async fn discover(
     State(server): State<Arc<Server>>,
     Json(req): Json<DiscoverRequest>,
@@ -140,7 +153,7 @@ async fn waiting_punch(
                 data.waiting_punch = true;
                 // Novo campo para indicar com qual peer está aguardando
                 data.waiting_for = Some(req.target_id);
-            },
+            }
             None => {
                 return Json(RelayResponse {
                     status: "error".into(),
@@ -165,5 +178,50 @@ async fn waiting_punch(
     Json(RelayResponse {
         status: "not_punch".into(),
         message: "".into(),
+    })
+}
+
+async fn keep_alive(
+    State(server): State<Arc<Server>>,
+    Json(req): Json<StoreRequest>,
+) -> Json<RelayResponse> {
+    let mut map = server.relay_map.write().unwrap();
+    if map.has_peer(&req.sender_id) {
+        // Atualiza o tempo de descoberta do peer
+        map.reset_peer_time(&req.sender_id);
+
+        Json(RelayResponse {
+            status: "alive".into(),
+            message: "".into(),
+        })
+    } else {
+        Json(RelayResponse {
+            status: "not_alive".into(),
+            message: "".into(),
+        })
+    }
+}
+
+async fn passive_wait(
+    State(server): State<Arc<Server>>,
+    Json(req): Json<PassiveWaitRequest>,
+) -> Json<PassiveWaitResponse> {
+    let map = server.relay_map.read().unwrap();
+
+    // Busca peers que estão esperando por `sender_id`
+    if let Some(peer) = map
+        .inner
+        .values()
+        .find(|p| p.waiting_punch && p.waiting_for == Some(req.sender_id))
+    {
+        return Json(PassiveWaitResponse {
+            status: "peer_found".into(),
+            peer_public_key: Some(peer.public_key),
+        });
+    }
+
+    Json(PassiveWaitResponse {
+        status: "none".into(),
+        peer_public_key: None,
     })
 }
