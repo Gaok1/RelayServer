@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::net::SocketAddrV4;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -18,16 +19,22 @@ impl RelayMap {
         }
     }
 
-    pub fn bind_peer(&mut self, public_key: PublicKey, peer_addr: SocketAddrV4) -> Result<(), String> {
+    pub fn bind_peer(
+        &mut self,
+        public_key: PublicKey,
+        peer_addr: SocketAddrV4,
+    ) -> Result<(), String> {
         if self.inner.len() >= MAX_RELAY_COUNT {
             return Err("Relay map está cheio".into());
         }
-        if self.inner.contains_key(&public_key) {
-            return Err("Peer já registrado".into());
-        }
 
         let peer_data = PeerData::new(public_key.clone(), peer_addr);
+        println!(
+            "Binding peer : {}  to {}",
+            peer_data.public_key, peer_data.peer_addr
+        );
         self.inner.insert(public_key, peer_data);
+
         Ok(())
     }
 
@@ -49,7 +56,7 @@ impl RelayMap {
         self.inner.contains_key(p_key)
     }
 
-    pub fn get_peerData_mut(&mut self, p_key: &PublicKey) ->&mut PeerData {
+    pub fn get_peerData_mut(&mut self, p_key: &PublicKey) -> &mut PeerData {
         self.inner.get_mut(p_key).unwrap()
     }
 
@@ -58,7 +65,6 @@ impl RelayMap {
             peer_data.discovery_time = now_ms();
         }
     }
-    
 }
 
 pub fn now_ms() -> u128 {

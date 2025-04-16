@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt">
+
 <head>
   <meta charset="UTF-8">
   <title>Teste do Servidor Relay com STUN</title>
@@ -8,10 +9,12 @@
       font-family: Arial, sans-serif;
       margin: 20px;
     }
+
     button {
       padding: 10px 20px;
       margin-bottom: 20px;
     }
+
     #output p {
       background: #f1f1f1;
       padding: 10px;
@@ -99,17 +102,19 @@
       const output = document.getElementById("output");
       output.innerHTML = "";
 
-      await testStore(1);
-      await testStore(2);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await testWaitingPunch(1, 2);
-      await testWaitingPunch(2, 1);
+      await testStore("peerA_abc123");
+      await testStore("peerB_xyz789");
+      await testWaitingPunch("peerA_abc123", "peerB_xyz789");
+      await testWaitingPunch("peerB_xyz789", "peerA_abc123");
+
     }
   </script>
 </head>
+
 <body>
   <h1>Teste do Servidor Relay (com STUN)</h1>
   <button onclick="runTests()">Executar Testes com STUN</button>
   <div id="output"></div>
 </body>
+
 </html>
